@@ -1,0 +1,30 @@
+name: lineup-guard
+on:
+  schedule:
+    # UTC. Each slot fires under both EDT and EST offsets; an extra run is harmless.
+    - cron: '7 13,14 * * 0'    # Sun ~9am ET, before international kickoffs
+    - cron: '47 15,16 * * 0'   # Sun ~11:47am ET, after 1pm inactives
+    - cron: '12 19,20 * * 0'   # Sun ~3:12pm ET, after 4pm inactives
+    - cron: '7 23 * * 0'       # Sun ~7pm ET, before SNF
+    - cron: '7 0 * * 1'
+    - cron: '57 22,23 * * 1'   # Mon ~7pm ET, before MNF
+    - cron: '7 23 * * 4'       # Thu ~7pm ET, before TNF; also catches Sunday byes
+    - cron: '7 0 * * 5'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency: guard
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 guard.py ${{ inputs.dry_run && '--dry-run' || '' }} | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+          ESPN_SWID: ${{ secrets.ESPN_SWID }}
