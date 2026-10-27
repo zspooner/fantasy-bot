@@ -8,6 +8,8 @@ import os
 import sys
 import time
 import urllib.request
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 LEAGUE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/segments/0/leagues/1215070607'
 WRITE = 'https://lm-api-writes.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/segments/0/leagues/1215070607/transactions/'
@@ -15,6 +17,9 @@ SCHEDULE = 'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026
 MEMBER = '{B715ECB6-6C3F-4B45-BF20-00856A72A082}'
 BAD = {'OUT', 'INJURY_RESERVE', 'SUSPENSION'}
 BENCH, IR = 20, 21
+# ET deadlines: just after inactives, before kickoff. GitHub fires cron runs hours late or not
+# at all, so runs start early and sleep until the next one. Keys are weekday() (Mon=0).
+DEADLINES = {6: ['09:05', '11:50', '15:15', '19:10'], 0: ['19:02'], 3: ['19:05']}
 SLOT = {0: 'QB', 2: 'RB', 4: 'WR', 6: 'TE', 16: 'D/ST', 17: 'K', 20: 'BN', 23: 'FLEX'}
 
 
@@ -71,6 +76,18 @@ def write(wk, moves):
     urllib.request.urlopen(req, timeout=30)
 
 
+def wait():
+    now = datetime.now(ZoneInfo('America/New_York'))
+    for hm in DEADLINES.get(now.weekday(), []):
+        t = now.replace(hour=int(hm[:2]), minute=int(hm[3:]), second=0, microsecond=0)
+        if t + timedelta(minutes=60) > now:
+            secs = (t - now).total_seconds()
+            if 0 < secs < 5.5 * 3600:
+                print(f'Waiting until {hm} ET', flush=True)
+                time.sleep(secs)
+            return
+
+
 def main(dry):
     wk, roster = load()
     stuck = []
@@ -96,4 +113,6 @@ def main(dry):
 
 
 if __name__ == '__main__':
+    if '--wait' in sys.argv:
+        wait()
     sys.exit(main('--dry-run' in sys.argv))
